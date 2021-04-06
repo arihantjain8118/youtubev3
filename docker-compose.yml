@@ -1,0 +1,53 @@
+version: "2"
+
+x-logging:
+  &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+
+services:
+  app: &app
+    build:
+      context: .
+    ports:
+      - 8000:8000
+    volumes:
+      - ./app:/app
+    command: >
+      sh -c " python manage.py makemigrations core video &&
+              python manage.py migrate &&
+              python manage.py runserver 0.0.0.0:8000"
+    env_file:
+      - .env.sample
+    depends_on:
+      - redis
+      - celery
+    <<: *default-logging
+
+  # Messaging Broker and In Memory Cache
+  redis:
+    image: redis:alpine
+    <<: *default-logging
+
+  #  Distributed Task Queue Worker
+  celery:
+    <<: *app
+    command: sh -c "celery -A yt_video_list worker --loglevel=info"
+    ports: [ ]
+    depends_on:
+      - redis
+    <<: *default-logging
+
+  #  Celery Beat
+  celery-beat:
+    <<: *app
+    command: sh -c "celery -A yt_video_list beat --loglevel=info"
+    ports: [ ]
+    depends_on:
+      - redis
+    <<: *default-logging
+
+
+
